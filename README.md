@@ -88,13 +88,6 @@ tests/
   test_api.py   # testes automatizados
 ```
 
-## Próximos passos
-
-- [ ] Autenticação com JWT
-- [ ] Migrações com Alembic
-- [ ] Histórico de movimentações do estoque
-- [ ] Docker e Docker Compose
-
 ---
 
 Feito por **Thiago Matosinhos** · [GitHub](https://github.com/thiagomartinsmdev) · [LinkedIn](https://www.linkedin.com/in/thiago-filipe-b08586325/)
