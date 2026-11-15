@@ -1,8 +1,10 @@
 """API de Estoque: ponto de entrada da aplicação."""
+import os
 from contextlib import asynccontextmanager
 from typing import List, Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Response, status
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 
 from . import crud, models, schemas
@@ -21,6 +23,18 @@ app = FastAPI(
     description="API REST para controle de produtos e estoque, feita com FastAPI e PostgreSQL.",
     version="1.0.0",
     lifespan=lifespan,
+)
+
+
+# CORS: permite que o painel web (outro endereço) converse com a API pelo navegador.
+# Em desenvolvimento aceita qualquer origem. Para restringir, defina no .env:
+# CORS_ORIGINS=http://127.0.0.1:5500,https://thiagomartinsmdev.github.io
+origens = [o.strip() for o in os.getenv("CORS_ORIGINS", "*").split(",") if o.strip()]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origens,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
