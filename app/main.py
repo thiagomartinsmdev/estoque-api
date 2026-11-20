@@ -3,17 +3,18 @@ import os
 from contextlib import asynccontextmanager
 from typing import List, Optional
 
-from fastapi import Depends, FastAPI, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 
-from . import crud, models, schemas
+from . import auth, crud, models, schemas
 from .database import Base, engine, get_db
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Cria as tabelas na primeira execução.
+    # Cria as tabelas que ainda não existem (produtos e usuarios).
+    # create_all nunca altera nem apaga tabelas que já existem.
     Base.metadata.create_all(bind=engine)
     yield
 
@@ -21,7 +22,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="API de Estoque",
     description="API REST para controle de produtos e estoque, feita com FastAPI e PostgreSQL.",
-    version="1.0.0",
+    version="1.1.0",
     lifespan=lifespan,
 )
 
@@ -38,6 +39,13 @@ app.add_middleware(
 )
 
 
+# Rotas de autenticação (/auth/status, /auth/registro, /auth/login, /auth/eu).
+app.include_router(auth.router)
+
+# Todas as rotas deste grupo exigem login (token JWT no cabeçalho Authorization).
+protegido = APIRouter(dependencies=[Depends(auth.usuario_atual)])
+
+
 def _produto_ou_404(db: Session, produto_id: int) -> models.Produto:
     produto = crud.obter(db, produto_id)
     if produto is None:
@@ -50,7 +58,7 @@ def raiz():
     return {"mensagem": "API de Estoque no ar.", "documentacao": "/docs"}
 
 
-@app.post(
+@protegido.post(
     "/produtos",
     response_model=schemas.ProdutoOut,
     status_code=status.HTTP_201_CREATED,
@@ -60,7 +68,7 @@ def criar_produto(dados: schemas.ProdutoCreate, db: Session = Depends(get_db)):
     return crud.criar(db, dados)
 
 
-@app.get("/produtos", response_model=List[schemas.ProdutoOut], tags=["Produtos"])
+@protegido.get("/produtos", response_model=List[schemas.ProdutoOut], tags=["Produtos"])
 def listar_produtos(
     categoria: Optional[str] = Query(None, description="Filtra por categoria"),
     busca: Optional[str] = Query(None, description="Busca pelo nome"),
@@ -72,12 +80,12 @@ def listar_produtos(
     return crud.listar(db, categoria, busca, baixo_estoque, skip, limit)
 
 
-@app.get("/produtos/{produto_id}", response_model=schemas.ProdutoOut, tags=["Produtos"])
+@protegido.get("/produtos/{produto_id}", response_model=schemas.ProdutoOut, tags=["Produtos"])
 def obter_produto(produto_id: int, db: Session = Depends(get_db)):
     return _produto_ou_404(db, produto_id)
 
 
-@app.patch("/produtos/{produto_id}", response_model=schemas.ProdutoOut, tags=["Produtos"])
+@protegido.patch("/produtos/{produto_id}", response_model=schemas.ProdutoOut, tags=["Produtos"])
 def atualizar_produto(
     produto_id: int, dados: schemas.ProdutoUpdate, db: Session = Depends(get_db)
 ):
@@ -85,7 +93,7 @@ def atualizar_produto(
     return crud.atualizar(db, produto, dados)
 
 
-@app.delete(
+@protegido.delete(
     "/produtos/{produto_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["Produtos"]
 )
 def apagar_produto(produto_id: int, db: Session = Depends(get_db)):
@@ -94,7 +102,7 @@ def apagar_produto(produto_id: int, db: Session = Depends(get_db)):
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@app.post(
+@protegido.post(
     "/produtos/{produto_id}/estoque", response_model=schemas.ProdutoOut, tags=["Estoque"]
 )
 def ajustar_estoque(
@@ -107,6 +115,10 @@ def ajustar_estoque(
         raise HTTPException(status_code=400, detail=str(erro))
 
 
-@app.get("/relatorios/resumo", response_model=schemas.ResumoEstoque, tags=["Relatórios"])
+@protegido.get("/relatorios/resumo", response_model=schemas.ResumoEstoque, tags=["Relatórios"])
 def resumo_estoque(db: Session = Depends(get_db)):
     return crud.resumo(db)
+
+
+# Registra as rotas protegidas na aplicação (precisa vir depois delas).
+app.include_router(protegido)

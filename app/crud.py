@@ -5,7 +5,7 @@ from typing import Optional
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from . import models, schemas
+from . import models, schemas, security
 
 LIMITE_ESTOQUE_BAIXO = 5
 
@@ -89,3 +89,46 @@ def resumo(db: Session) -> schemas.ResumoEstoque:
         valor_total_estoque=Decimal(str(valor)).quantize(Decimal("0.01")),
         produtos_com_estoque_baixo=baixo or 0,
     )
+
+
+# ---------- Usuários ----------
+
+
+def _normalizar_email(email: str) -> str:
+    return email.strip().lower()
+
+
+def contar_usuarios(db: Session) -> int:
+    return db.scalar(select(func.count(models.Usuario.id))) or 0
+
+
+def obter_usuario_por_email(db: Session, email: str) -> Optional[models.Usuario]:
+    return db.scalar(
+        select(models.Usuario).where(models.Usuario.email == _normalizar_email(email))
+    )
+
+
+def criar_usuario(db: Session, dados: schemas.UsuarioCreate) -> models.Usuario:
+    usuario = models.Usuario(
+        nome=dados.nome.strip(),
+        email=_normalizar_email(dados.email),
+        senha_hash=security.hash_senha(dados.senha),
+    )
+    db.add(usuario)
+    db.commit()
+    db.refresh(usuario)
+    return usuario
+
+
+def autenticar(db: Session, email: str, senha: str) -> Optional[models.Usuario]:
+    """Devolve o usuário se e-mail e senha estiverem certos; senão None.
+
+    A senha é sempre verificada (com um hash falso se o e-mail não existir),
+    para o tempo de resposta ser parecido nos dois casos.
+    """
+    usuario = obter_usuario_por_email(db, email)
+    guardado = usuario.senha_hash if usuario else security.HASH_FALSO
+    senha_ok = security.verificar_senha(senha, guardado)
+    if usuario is None or not senha_ok or not usuario.ativo:
+        return None
+    return usuario
