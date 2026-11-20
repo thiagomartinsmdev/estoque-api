@@ -46,3 +46,40 @@ class ResumoEstoque(BaseModel):
     itens_em_estoque: int
     valor_total_estoque: Decimal
     produtos_com_estoque_baixo: int
+
+
+# ---------- Autenticação ----------
+
+# Validação simples de e-mail (sem precisar da biblioteca email-validator).
+REGEX_EMAIL = r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
+
+
+class UsuarioCreate(BaseModel):
+    nome: str = Field(min_length=2, max_length=80, examples=["Thiago"])
+    email: str = Field(max_length=120, pattern=REGEX_EMAIL, examples=["thiago@exemplo.com"])
+    senha: str = Field(min_length=8, max_length=128, examples=["uma-senha-forte"])
+
+
+class UsuarioLogin(BaseModel):
+    email: str = Field(max_length=120, examples=["thiago@exemplo.com"])
+    senha: str = Field(max_length=128, examples=["uma-senha-forte"])
+
+
+class UsuarioOut(BaseModel):
+    """O que a API devolve sobre um usuário (nunca a senha ou o hash)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    nome: str
+    email: str
+
+
+class TokenOut(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    usuario: UsuarioOut
+
+
+class StatusAuth(BaseModel):
+    tem_usuarios: bool
